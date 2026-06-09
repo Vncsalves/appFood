@@ -1,89 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Image, FlatList
+  StyleSheet, Image, FlatList, Modal, RefreshControl, ActivityIndicator
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { colors, fonts } from '../../constants'
+import { useCart } from '../../context/CartContext'
 
 const tabs = ['Em andamento', 'Concluídos', 'Cancelados']
 
-const orders = {
-  'Em andamento': [
-    {
-      id: 1,
-      store: 'Pizzaria Roma',
-      image: { uri: 'https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=200' },
-      status: 'A caminho',
-      eta: 'Chega em 15 min',
-      total: 67.90,
-      items: 2,
-      date: 'Hoje, 19:42',
-      statusColor: colors.primary,
-    },
-    {
-      id: 2,
-      store: 'Sushi Zen',
-      image: { uri: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200' },
-      status: 'Preparando',
-      eta: 'Chega em 35 min',
-      total: 98.50,
-      items: 1,
-      date: 'Hoje, 19:10',
-      statusColor: '#FFB800',
-    },
-  ],
-  'Concluídos': [
-    {
-      id: 3,
-      store: 'Burger House',
-      image: { uri: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=200' },
-      status: 'Entregue',
-      eta: 'Entregue ontem',
-      total: 54.00,
-      items: 3,
-      date: 'Ontem, 20:15',
-      statusColor: '#4CAF50',
-    },
-    {
-      id: 4,
-      store: 'Café Aroma',
-      image: { uri: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=200' },
-      status: 'Entregue',
-      eta: 'Entregue há 3 dias',
-      total: 32.00,
-      items: 2,
-      date: '30 mai, 15:20',
-      statusColor: '#4CAF50',
-    },
-    {
-      id: 5,
-      store: 'Restaurante do Chef',
-      image: { uri: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200' },
-      status: 'Entregue',
-      eta: 'Entregue há 1 semana',
-      total: 125.80,
-      items: 4,
-      date: '27 mai, 13:00',
-      statusColor: '#4CAF50',
-    },
-  ],
-  'Cancelados': [
-    {
-      id: 6,
-      store: 'Açaí da Praça',
-      image: { uri: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=200' },
-      status: 'Cancelado',
-      eta: 'Cancelado pelo cliente',
-      total: 22.00,
-      items: 1,
-      date: '25 mai, 18:45',
-      statusColor: '#F44336',
-    },
-  ],
-}
+
 
 function formatBRL(value) {
   return `R$ ${value.toFixed(2).replace('.', ',')}`
@@ -120,13 +48,38 @@ function OrderCard({ item, onPress }) {
 
 export default function OrdersScreen() {
   const navigation = useNavigation()
+  const { orders, loadOrders } = useCart()
   const [activeTab, setActiveTab] = useState('Em andamento')
-  const data = orders[activeTab] || []
+  const [selectedOrder, setSelectedOrder] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const handleRefresh = async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      await loadOrders()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    loadOrders()
+  }, [])
+
+  const data = orders.filter(o => o.type === activeTab)
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
+      <View style={[styles.header, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
         <Text style={styles.title}>Meus pedidos</Text>
+        <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh} disabled={refreshing}>
+          {refreshing ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Ionicons name="refresh-outline" size={22} color={colors.primary} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <View style={styles.tabsWrap}>
@@ -166,20 +119,126 @@ export default function OrdersScreen() {
           renderItem={({ item }) => (
             <OrderCard
               item={item}
-              onPress={() => navigation.navigate('ProductDetail', { product: {
-                image: item.image,
-                name: item.store,
-                store: item.store,
-                rating: 4.7,
-                reviews: 100,
-                price: item.total,
-              }})}
+              onPress={() => setSelectedOrder(item)}
             />
           )}
           contentContainerStyle={{ paddingTop: 16, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
         />
       )}
+
+      <Modal transparent animationType="slide" visible={selectedOrder !== null} onRequestClose={() => setSelectedOrder(null)}>
+        <View style={styles.modalBg}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detalhes do Pedido</Text>
+              <TouchableOpacity onPress={() => setSelectedOrder(null)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedOrder && (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                <View style={styles.detailHeader}>
+                  <Image source={selectedOrder.image} style={styles.detailStoreImg} resizeMode="cover" />
+                  <View style={styles.detailHeaderInfo}>
+                    <Text style={styles.detailStoreName}>{selectedOrder.store}</Text>
+                    <Text style={styles.detailOrderId}>Pedido #{selectedOrder.id} · {selectedOrder.date}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.detailStatusBox, { borderColor: selectedOrder.statusColor }]}>
+                  <View style={[styles.statusDot, { backgroundColor: selectedOrder.statusColor, marginRight: 8 }]} />
+                  <Text style={[styles.detailStatusText, { color: selectedOrder.statusColor }]}>
+                    {selectedOrder.status} ({selectedOrder.eta})
+                  </Text>
+                </View>
+
+                <Text style={styles.detailSectionTitle}>Itens</Text>
+                <View style={styles.detailCard}>
+                  {selectedOrder.itemsList && selectedOrder.itemsList.length > 0 ? (
+                    selectedOrder.itemsList.map((item, idx) => (
+                      <View key={idx} style={styles.detailItemRow}>
+                        <View style={styles.detailItemQtyBox}>
+                          <Text style={styles.detailItemQty}>{item.quantity}x</Text>
+                        </View>
+                        <Text style={styles.detailItemName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={styles.detailItemPrice}>{formatBRL(parseFloat(item.price) * item.quantity)}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.emptyDetailText}>Sem detalhes dos itens disponíveis</Text>
+                  )}
+                </View>
+
+                <Text style={styles.detailSectionTitle}>Resumo de Valores</Text>
+                <View style={styles.detailCard}>
+                  <View style={styles.detailSummaryRow}>
+                    <Text style={styles.detailSummaryLabel}>Subtotal</Text>
+                    <Text style={styles.detailSummaryValue}>
+                      {formatBRL(
+                        selectedOrder.itemsList && selectedOrder.itemsList.length > 0
+                          ? selectedOrder.itemsList.reduce((acc, i) => acc + parseFloat(i.price) * i.quantity, 0)
+                          : selectedOrder.total - (selectedOrder.deliveryFee || 0)
+                      )}
+                    </Text>
+                  </View>
+                  <View style={styles.detailSummaryRow}>
+                    <Text style={styles.detailSummaryLabel}>Taxa de entrega</Text>
+                    <Text style={styles.detailSummaryValue}>
+                      {selectedOrder.deliveryFee > 0 ? formatBRL(selectedOrder.deliveryFee) : 'Grátis'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailDivider} />
+                  <View style={styles.detailSummaryRow}>
+                    <Text style={styles.detailTotalLabel}>Total</Text>
+                    <Text style={styles.detailTotalValue}>
+                      {formatBRL(selectedOrder.total)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.deliveryCodeCard}>
+                  <Ionicons name="key-outline" size={24} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.deliveryCodeLabel}>Código de confirmação</Text>
+                    <Text style={styles.deliveryCodeSub}>Informe ao entregador ao receber</Text>
+                  </View>
+                  <Text style={styles.deliveryCode}>{selectedOrder.deliveryVerificationCode}</Text>
+                </View>
+
+                <View style={styles.detailCardRow}>
+                  <Ionicons name="location-outline" size={20} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailCardLabel}>Endereço de entrega</Text>
+                    <Text style={styles.detailCardValue}>{selectedOrder.address}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.detailCardRow, { marginTop: 10 }]}>
+                  <Ionicons 
+                    name={
+                      selectedOrder.paymentMethod === 'Pix' 
+                        ? 'qr-code-outline' 
+                        : selectedOrder.paymentMethod === 'Dinheiro' 
+                        ? 'cash-outline' 
+                        : 'card-outline'
+                    } 
+                    size={20} 
+                    color={colors.primary} 
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailCardLabel}>Forma de pagamento</Text>
+                    <Text style={styles.detailCardValue}>{selectedOrder.paymentMethod}</Text>
+                  </View>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -198,6 +257,11 @@ const styles = StyleSheet.create({
     fontSize: fonts.sizes.xxl,
     fontWeight: fonts.weight.bold,
     color: colors.textPrimary,
+  },
+  refreshBtn: {
+    width: 40, height: 40, borderRadius: 8,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center', justifyContent: 'center',
   },
   tabsWrap: {
     height: 44,
@@ -336,5 +400,195 @@ const styles = StyleSheet.create({
     fontSize: fonts.sizes.sm,
     color: colors.primary,
     fontWeight: fonts.weight.medium,
+  },
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '90%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: fonts.sizes.xl,
+    fontWeight: fonts.weight.bold,
+    color: colors.textPrimary,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 16,
+  },
+  detailStoreImg: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  detailHeaderInfo: {
+    flex: 1,
+  },
+  detailStoreName: {
+    fontSize: fonts.sizes.lg,
+    fontWeight: fonts.weight.bold,
+    color: colors.textPrimary,
+  },
+  detailOrderId: {
+    fontSize: fonts.sizes.sm,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  detailStatusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    backgroundColor: colors.background,
+  },
+  detailStatusText: {
+    fontSize: fonts.sizes.md,
+    fontWeight: fonts.weight.medium,
+  },
+  detailSectionTitle: {
+    fontSize: fonts.sizes.md,
+    fontWeight: fonts.weight.bold,
+    color: colors.textPrimary,
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  detailCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  detailItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 10,
+  },
+  detailItemQtyBox: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  detailItemQty: {
+    fontSize: fonts.sizes.sm,
+    color: colors.primary,
+    fontWeight: fonts.weight.bold,
+  },
+  detailItemName: {
+    flex: 1,
+    fontSize: fonts.sizes.md,
+    color: colors.textPrimary,
+  },
+  detailItemPrice: {
+    fontSize: fonts.sizes.md,
+    color: colors.textPrimary,
+    fontWeight: fonts.weight.medium,
+  },
+  emptyDetailText: {
+    fontSize: fonts.sizes.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  detailSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 4,
+  },
+  detailSummaryLabel: {
+    fontSize: fonts.sizes.sm,
+    color: colors.textMuted,
+  },
+  detailSummaryValue: {
+    fontSize: fonts.sizes.sm,
+    color: colors.textPrimary,
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 8,
+  },
+  detailTotalLabel: {
+    fontSize: fonts.sizes.md,
+    fontWeight: fonts.weight.bold,
+    color: colors.textPrimary,
+  },
+  detailTotalValue: {
+    fontSize: fonts.sizes.md,
+    fontWeight: fonts.weight.bold,
+    color: colors.primary,
+  },
+  deliveryCodeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.primaryLight,
+    padding: 14,
+    borderRadius: 12,
+    marginVertical: 12,
+  },
+  deliveryCodeLabel: {
+    fontSize: fonts.sizes.sm,
+    fontWeight: fonts.weight.bold,
+    color: colors.textPrimary,
+  },
+  deliveryCodeSub: {
+    fontSize: fonts.sizes.xs,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  deliveryCode: {
+    fontSize: fonts.sizes.lg,
+    fontWeight: fonts.weight.bold,
+    color: colors.primary,
+    backgroundColor: colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  detailCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.background,
+    padding: 14,
+    borderRadius: 12,
+  },
+  detailCardLabel: {
+    fontSize: fonts.sizes.xs,
+    color: colors.textMuted,
+  },
+  detailCardValue: {
+    fontSize: fonts.sizes.sm,
+    color: colors.textPrimary,
+    fontWeight: fonts.weight.medium,
+    marginTop: 2,
   },
 })

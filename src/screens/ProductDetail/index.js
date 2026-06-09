@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { colors, fonts } from '../../constants'
+import { useCart } from '../../context/CartContext'
 
 const defaultProduct = {
   image: { uri: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800' },
@@ -25,12 +26,7 @@ function parsePrice(p) {
   return 0
 }
 
-const extras = [
-  { id: 1, name: 'Borda recheada', price: 8 },
-  { id: 2, name: 'Mussarela extra', price: 6 },
-  { id: 3, name: 'Manjericão extra', price: 3 },
-  { id: 4, name: 'Tomate seco', price: 5 },
-]
+
 
 function formatBRL(value) {
   return `R$ ${value.toFixed(2).replace('.', ',')}`
@@ -43,27 +39,21 @@ export default function ProductDetailScreen() {
   const product = passed ? {
     ...defaultProduct,
     ...passed,
+    store: passed.store || defaultProduct.store,
+    description: passed.description || defaultProduct.description,
     price: parsePrice(passed.price),
     rating: passed.rating ?? defaultProduct.rating,
     reviews: passed.reviews ?? defaultProduct.reviews,
   } : defaultProduct
 
   const [qty, setQty] = useState(1)
-  const [selectedExtras, setSelectedExtras] = useState([])
   const [favorited, setFavorited] = useState(false)
+  const { addToCart: addItem } = useCart()
 
-  const toggleExtra = (id) => {
-    setSelectedExtras(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
-  }
-
-  const extrasTotal = extras
-    .filter(e => selectedExtras.includes(e.id))
-    .reduce((acc, e) => acc + e.price, 0)
-  const total = (product.price + extrasTotal) * qty
+  const total = product.price * qty
 
   const addToCart = () => {
+    addItem(product, qty)
     Alert.alert(
       'Adicionado ao carrinho',
       `${qty}× ${product.name}\nTotal: ${formatBRL(total)}`,
@@ -131,25 +121,6 @@ export default function ProductDetailScreen() {
           <Text style={styles.sectionTitle}>Descrição</Text>
           <Text style={styles.description}>{product.description}</Text>
 
-          <Text style={styles.sectionTitle}>Adicionais</Text>
-          <View style={styles.extrasList}>
-            {extras.map(extra => {
-              const selected = selectedExtras.includes(extra.id)
-              return (
-                <TouchableOpacity
-                  key={extra.id}
-                  style={styles.extraRow}
-                  onPress={() => toggleExtra(extra.id)}
-                >
-                  <View style={[styles.checkbox, selected && styles.checkboxActive]}>
-                    {selected && <Ionicons name="checkmark" size={14} color={colors.white} />}
-                  </View>
-                  <Text style={styles.extraName}>{extra.name}</Text>
-                  <Text style={styles.extraPrice}>+ {formatBRL(extra.price)}</Text>
-                </TouchableOpacity>
-              )
-            })}
-          </View>
         </View>
       </ScrollView>
 

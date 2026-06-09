@@ -1,13 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, TextInput, Image, FlatList, Modal
+  StyleSheet, TextInput, Image, FlatList, Modal,
+  ActivityIndicator, StatusBar
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { colors, fonts } from '../../constants'
+import { fetchRestaurants, fetchProducts, fetchUserProfile } from '../../services/api'
 
 const categories = [
   { id: 1, image: { uri: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=200' }, label: 'Saladas' },
@@ -20,28 +22,6 @@ const categories = [
   { id: 8, image: { uri: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=200' }, label: 'Sorvetes' },
   { id: 9, image: { uri: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=200' }, label: 'Carnes' },
   { id: 10, image: { uri: 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=200' }, label: 'Café' },
-]
-
-const promos = [
-  { id: 1, image: { uri: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400' }, name: 'Picanha grelhada', price: 'R$ 58,00', oldPrice: 'R$ 70,00', badge: 'OFERTA' },
-  { id: 2, image: { uri: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=400' }, name: 'Bolo de chocolate', price: 'R$ 32,00', oldPrice: 'R$ 40,00', badge: '20% OFF' },
-  { id: 3, image: { uri: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400' }, name: 'Pizza margherita', price: 'R$ 45,00', oldPrice: null, badge: 'POPULAR' },
-  { id: 4, image: { uri: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=400' }, name: 'Bowl de açaí', price: 'R$ 22,00', oldPrice: null, badge: 'NOVO' },
-]
-
-const allProducts = [
-  ...promos,
-  { id: 5, image: { uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400' }, name: 'Burger clássico', price: 'R$ 28,00', oldPrice: null, badge: null },
-  { id: 6, image: { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400' }, name: 'Bowl de poke', price: 'R$ 38,00', oldPrice: null, badge: null },
-  { id: 7, image: { uri: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=400' }, name: 'Sushi variado', price: 'R$ 52,00', oldPrice: null, badge: null },
-  { id: 8, image: { uri: 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400' }, name: 'Café especial', price: 'R$ 14,00', oldPrice: null, badge: null },
-]
-
-const stores = [
-  { id: 1, image: { uri: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800' }, name: 'Restaurante do Chef', category: 'Brasileira • Carnes', rating: 4.8, time: '30-45 min', fee: 'Grátis' },
-  { id: 2, image: { uri: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800' }, name: 'Sushi Zen', category: 'Japonesa • Frutos do mar', rating: 4.9, time: '40-55 min', fee: 'R$ 6,90' },
-  { id: 3, image: { uri: 'https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=800' }, name: 'Pizzaria Roma', category: 'Italiana • Pizzas', rating: 4.7, time: '25-40 min', fee: 'Grátis' },
-  { id: 4, image: { uri: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800' }, name: 'Burger House', category: 'Americana • Lanches', rating: 4.6, time: '20-35 min', fee: 'R$ 4,90' },
 ]
 
 const sortOptions = ['Relevância', 'Menor preço', 'Maior preço', 'Melhor avaliação']
@@ -107,27 +87,120 @@ export default function HomeScreen() {
   const [maxPrice, setMaxPrice] = useState(100)
   const [minRating, setMinRating] = useState(0)
 
+  const [stores, setStores] = useState([])
+  const [promos, setPromos] = useState([])
+  const [allProducts, setAllProducts] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState({ name: 'Carregando...', photo: '' })
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      async function loadProfile() {
+        try {
+          const profile = await fetchUserProfile()
+          setUser({
+            name: profile.name,
+            photo: profile.photo || ''
+          })
+        } catch (err) {
+          console.log('Error loading profile on focus on Home:', err)
+        }
+      }
+      loadProfile()
+    })
+    return unsubscribe
+  }, [navigation])
+
+  useEffect(() => {
+    async function loadApiData() {
+      try {
+        setIsLoading(true)
+        const restaurantsData = await fetchRestaurants()
+        
+        const mappedStores = restaurantsData.map((r, index) => ({
+          id: r.id,
+          name: r.name,
+          isOpen: r.isOpen,
+          image: { uri: [
+            'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800',
+            'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800',
+            'https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=800'
+          ][index % 3] },
+          category: ['Brasileira • Carnes', 'Lanches • Fast Food', 'Pizzas • Italiana'][index % 3],
+          rating: (4.5 + (index % 5) * 0.1).toFixed(1),
+          time: ['30-45 min', '40-55 min', '25-40 min'][index % 3],
+          fee: ['Grátis', 'R$ 6,90', 'R$ 4,90'][index % 3]
+        }))
+
+        setStores(mappedStores)
+
+        if (restaurantsData.length > 0) {
+          const productsData = await fetchProducts(restaurantsData[0].id)
+          
+          const mappedProducts = productsData.map((p, index) => {
+            const formattedPrice = `R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}`
+            const matchedStore = restaurantsData.find(r => r.id === p.restaurantId) || restaurantsData[0]
+            const storeName = matchedStore ? matchedStore.name : 'E-Dento Food'
+            return {
+              id: p.id,
+              name: p.name,
+              price: formattedPrice,
+              oldPrice: index % 2 === 0 ? `R$ ${(parseFloat(p.price) * 1.2).toFixed(2).replace('.', ',')}` : null,
+              image: p.image && p.image.startsWith('data:image') 
+                ? { uri: p.image } 
+                : { uri: p.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400' },
+              badge: index % 2 === 0 ? 'OFERTA' : null,
+              description: p.description || '',
+              store: storeName,
+              restaurantId: p.restaurantId || matchedStore.id
+            }
+          })
+
+          setPromos(mappedProducts.slice(0, 4))
+          setAllProducts(mappedProducts)
+        }
+      } catch (error) {
+        console.error('Failed to fetch API data on Home:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadApiData()
+  }, [])
+
   const goToProduct = (product) => navigation.navigate('ProductDetail', { product })
+  const goToRestaurant = (restaurant) => navigation.navigate('RestaurantDetail', { restaurant })
   const goToProfile = () => navigation.navigate('Profile')
 
   const filteredProducts = useMemo(() => {
     if (!query.trim()) return null
     const q = query.toLowerCase()
     return allProducts.filter(p => p.name.toLowerCase().includes(q))
-  }, [query])
+  }, [query, allProducts])
 
   const filteredPromos = useMemo(() => {
     return promos.filter(p => {
       const priceNum = parseFloat(p.price.replace('R$ ', '').replace(',', '.'))
       return priceNum <= maxPrice
     })
-  }, [maxPrice])
+  }, [maxPrice, promos])
 
   const filteredStores = useMemo(() => {
     return stores.filter(s => s.rating >= minRating)
-  }, [minRating])
+  }, [minRating, stores])
 
   const isSearching = !!filteredProducts
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, styles.center]}>
+        <StatusBar barStyle="dark-content" />
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Carregando dados da API...</Text>
+      </SafeAreaView>
+    )
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -141,13 +214,16 @@ export default function HomeScreen() {
         >
           <View style={styles.header}>
             <TouchableOpacity style={styles.headerLeft} onPress={goToProfile} activeOpacity={0.7}>
-              <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }}
-                style={styles.avatar}
-              />
+              {user.photo ? (
+                <Image source={{ uri: user.photo }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <Ionicons name="person" size={24} color={colors.textLight} />
+                </View>
+              )}
               <View>
                 <Text style={styles.welcomeLabel}>Welcome Back</Text>
-                <Text style={styles.userName}>João Silva</Text>
+                <Text style={styles.userName}>{user.name}</Text>
               </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.bellBtn} onPress={goToProfile}>
@@ -290,7 +366,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
             {filteredStores.map(store => (
-              <StoreCard key={store.id} item={store} onPress={() => goToProduct(store)} />
+              <StoreCard key={store.id} item={store} onPress={() => goToRestaurant(store)} />
             ))}
           </>
         )}
@@ -396,6 +472,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.6)',
   },
+  avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   welcomeLabel: {
     fontSize: fonts.sizes.md,
     fontWeight: fonts.weight.medium,
@@ -811,4 +888,14 @@ const styles = StyleSheet.create({
   modalBtnText: { fontSize: fonts.sizes.md, fontWeight: fonts.weight.bold, color: colors.white },
   modalBtnGhost: { backgroundColor: colors.background },
   modalBtnGhostText: { fontSize: fonts.sizes.md, fontWeight: fonts.weight.medium, color: colors.textPrimary },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: fonts.sizes.sm,
+    color: colors.textMuted,
+    fontWeight: fonts.weight.medium,
+  },
 })

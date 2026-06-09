@@ -1,4 +1,5 @@
-import { NavigationContainer } from '@react-navigation/native'
+import { useEffect } from 'react'
+import { NavigationContainer, createNavigationContainerRef, CommonActions } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { View, TouchableOpacity, StyleSheet } from 'react-native'
@@ -11,8 +12,15 @@ import OrdersScreen from '../screens/Orders'
 import ProfileScreen from '../screens/Profile'
 import QRScannerScreen from '../screens/QRScanner'
 import ProductDetailScreen from '../screens/ProductDetail'
+import LoginScreen from '../screens/Login'
+import RegisterScreen from '../screens/Register'
+import RestaurantDetailScreen from '../screens/RestaurantDetail'
 
 import { colors } from '../constants'
+import { useCart } from '../context/CartContext'
+import { setUnauthorizedHandler } from '../services/api'
+
+export const navigationRef = createNavigationContainerRef()
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
@@ -29,6 +37,9 @@ function CenterScanButton({ onPress, accessibilityState }) {
 }
 
 function TabNavigator() {
+  const { cartItems } = useCart()
+  const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0)
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -81,6 +92,8 @@ function TabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cart-outline" size={size} color={color} />
           ),
+          tabBarBadge: cartCount > 0 ? cartCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.primary, color: colors.white }
         }}
       />
     </Tab.Navigator>
@@ -88,10 +101,26 @@ function TabNavigator() {
 }
 
 export default function Navigation() {
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      if (navigationRef.isReady()) {
+        navigationRef.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          })
+        )
+      }
+    })
+  }, [])
+
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="Tabs" component={TabNavigator} />
+        <Stack.Screen name="RestaurantDetail" component={RestaurantDetailScreen} />
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
       </Stack.Navigator>
